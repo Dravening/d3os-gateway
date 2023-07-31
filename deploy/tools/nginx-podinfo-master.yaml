@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-podinfo-master
+  name: nginx-podinfo-master
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx-podinfo-master
+  template:
+    metadata:
+      name: nginx-podinfo-master
+      labels:
+        app: nginx-podinfo-master
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.8
+          ports:
+            - name: web
+              containerPort: 80
+              protocol: TCP
+          volumeMounts:
+            - name: workdir
+              mountPath: /usr/share/nginx/html
+      initContainers:
+        - name: install
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          image: busybox
+          command:
+            - sh
+            - -c
+            - echo "POD_NAME:${POD_NAME} POD_IP:${POD_IP} branch:master" > /work-dir/index.html
+          volumeMounts:
+            - name: workdir
+              mountPath: "/work-dir"
+      volumes:
+        - name: workdir
+          emptyDir: {}
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: nginx-podinfo-master
+  namespace: default
+spec:
+  ports:
+    - name: web
+      protocol: TCP
+      port: 80
+      targetPort: 80
+  selector:
+    app: nginx-podinfo-master
+  type: ClusterIP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-nginx-master
+  namespace: default
+spec:
+  ingressClassName: d3os
+  rules:
+    - host: local.d3os.com
+      http:
+        paths:
+          - path: /master
+            backend:
+              service:
+                name: nginx-podinfo-master
+                port:
+                  number: 80
+            pathType: Prefix
